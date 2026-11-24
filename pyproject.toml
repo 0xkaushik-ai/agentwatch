@@ -1,0 +1,16 @@
+[project]
+name = "agentwatch"
+version = "0.1.0"
+description = "Monitor AI agent token usage per session and per subagent"
+requires-python = ">=3.10"
+dependencies = ["rich>=13"]
+
+[project.scripts]
+agentwatch = "agentwatch.cli:main"
+
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.package-data]
+agentwatch = ["static/*.html"]

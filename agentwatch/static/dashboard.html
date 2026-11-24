@@ -1,0 +1,384 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>agentwatch · token usage</title>
+<style>
+.viz-root {
+  color-scheme: light;
+  --page: #f4f3f0;
+  --surface-1: #fcfcfb;
+  --border: #e4e2dc;
+  --grid: #ecebe6;
+  --text-primary: #0b0b0b;
+  --text-secondary: #52514e;
+  --text-muted: #7a7974;
+  --series-1: #2a78d6;
+  --series-1-soft: #cde2fb;
+  --good: #0ca30c;
+  --hover: #f0efec;
+}
+@media (prefers-color-scheme: dark) {
+  :root:where(:not([data-theme="light"])) .viz-root {
+    color-scheme: dark;
+    --page: #121211;
+    --surface-1: #1a1a19;
+    --border: #2e2e2c;
+    --grid: #262624;
+    --text-primary: #f0efec;
+    --text-secondary: #c3c2b7;
+    --text-muted: #8f8e86;
+    --series-1: #3987e5;
+    --series-1-soft: #184f95;
+    --hover: #242422;
+  }
+}
+:root[data-theme="dark"] .viz-root {
+  color-scheme: dark;
+  --page: #121211;
+  --surface-1: #1a1a19;
+  --border: #2e2e2c;
+  --grid: #262624;
+  --text-primary: #f0efec;
+  --text-secondary: #c3c2b7;
+  --text-muted: #8f8e86;
+  --series-1: #3987e5;
+  --series-1-soft: #184f95;
+  --hover: #242422;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body { font: 14px/1.45 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif; }
+.viz-root { background: var(--page); color: var(--text-primary); min-height: 100vh; padding: 24px clamp(16px, 3vw, 40px) 48px; }
+header { display: flex; align-items: baseline; gap: 16px; flex-wrap: wrap; margin-bottom: 20px; }
+h1 { font-size: 20px; margin: 0; font-weight: 650; letter-spacing: -0.01em; }
+.sub { color: var(--text-muted); font-size: 13px; }
+.live-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--good); margin-right: 6px; vertical-align: 1px; }
+.live-dot.off { background: var(--text-muted); }
+
+.filters { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; margin-bottom: 20px; }
+.seg { display: inline-flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; background: var(--surface-1); }
+.seg button { border: 0; background: transparent; color: var(--text-secondary); padding: 6px 12px; font: inherit; font-size: 13px; cursor: pointer; }
+.seg button + button { border-left: 1px solid var(--border); }
+.seg button[aria-pressed="true"] { background: var(--text-primary); color: var(--surface-1); }
+select, .btn { font: inherit; font-size: 13px; padding: 6px 10px; border-radius: 8px; border: 1px solid var(--border); background: var(--surface-1); color: var(--text-primary); }
+.btn { cursor: pointer; }
+.spacer { flex: 1; }
+
+.kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin-bottom: 16px; }
+.kpi { background: var(--surface-1); border: 1px solid var(--border); border-radius: 12px; padding: 14px 16px; }
+.kpi .label { color: var(--text-secondary); font-size: 12px; }
+.kpi .value { font-size: 26px; font-weight: 650; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; margin-top: 2px; }
+.kpi .note { color: var(--text-muted); font-size: 12px; }
+
+.grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.card { background: var(--surface-1); border: 1px solid var(--border); border-radius: 12px; padding: 16px; min-width: 0; }
+.card.wide { grid-column: 1 / -1; }
+.card h2 { font-size: 14px; margin: 0 0 2px; font-weight: 600; }
+.card .hint { color: var(--text-muted); font-size: 12px; margin-bottom: 10px; }
+@media (max-width: 900px) { .grid { grid-template-columns: 1fr; } }
+
+svg text { fill: var(--text-muted); font-size: 11px; font-variant-numeric: tabular-nums; }
+.axis line, .gridline { stroke: var(--grid); stroke-width: 1; }
+.bar { fill: var(--series-1); }
+.bar.dim { opacity: 0.35; }
+.hit { fill: transparent; cursor: default; }
+
+.hbars { display: grid; grid-template-columns: minmax(90px, max-content) 1fr max-content; gap: 6px 10px; align-items: center; font-size: 13px; }
+.hbars .name { color: var(--text-secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 260px; }
+.hbars .track { height: 14px; position: relative; }
+.hbars .fill { position: absolute; left: 0; top: 0; bottom: 0; background: var(--series-1); border-radius: 0 4px 4px 0; min-width: 2px; }
+.hbars .val { color: var(--text-primary); font-variant-numeric: tabular-nums; text-align: right; }
+.hbars .row-hit { display: contents; }
+
+table { width: 100%; border-collapse: collapse; font-size: 13px; font-variant-numeric: tabular-nums; }
+th { text-align: left; color: var(--text-muted); font-weight: 500; font-size: 12px; padding: 6px 8px; border-bottom: 1px solid var(--border); white-space: nowrap; }
+td { padding: 7px 8px; border-bottom: 1px solid var(--grid); color: var(--text-secondary); }
+td.num, th.num { text-align: right; }
+td.strong { color: var(--text-primary); font-weight: 600; }
+tbody tr.click { cursor: pointer; }
+tbody tr.click:hover, tbody tr.sel { background: var(--hover); }
+.mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; }
+.tag { display: inline-block; padding: 1px 7px; border-radius: 999px; border: 1px solid var(--border); font-size: 12px; color: var(--text-secondary); }
+.tag.live { border-color: var(--good); color: var(--text-primary); }
+.share { display: flex; align-items: center; gap: 8px; justify-content: flex-end; }
+.share .t { width: 70px; height: 6px; background: var(--grid); border-radius: 3px; overflow: hidden; }
+.share .f { height: 100%; background: var(--series-1); }
+.scroll { overflow-x: auto; }
+.empty { color: var(--text-muted); padding: 24px 0; text-align: center; }
+
+#detail h2 .mono { color: var(--text-muted); font-weight: 400; }
+.tip { position: fixed; pointer-events: none; z-index: 10; background: var(--surface-1); border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; font-size: 12px; box-shadow: 0 4px 16px rgba(0,0,0,.12); display: none; min-width: 150px; }
+.tip .h { font-weight: 600; color: var(--text-primary); margin-bottom: 4px; }
+.tip .r { display: flex; justify-content: space-between; gap: 16px; color: var(--text-secondary); font-variant-numeric: tabular-nums; }
+.tip .r b { color: var(--text-primary); font-weight: 600; }
+.foot { color: var(--text-muted); font-size: 12px; margin-top: 16px; }
+</style>
+</head>
+<body>
+<div class="viz-root">
+  <header>
+    <h1>agentwatch</h1>
+    <span class="sub"><span id="dot" class="live-dot"></span><span id="status">loading…</span></span>
+  </header>
+
+  <div class="filters">
+    <div class="seg" id="range" role="group" aria-label="Time range">
+      <button data-v="24h">24h</button><button data-v="7d" aria-pressed="true">7d</button><button data-v="30d">30d</button><button data-v="all">All</button>
+    </div>
+    <select id="project" aria-label="Project"><option value="">All projects</option></select>
+    <div class="seg" id="metric" role="group" aria-label="Metric">
+      <button data-v="cost_usd" aria-pressed="true">Est. $</button><button data-v="total">Tokens</button><button data-v="output">Output tokens</button>
+    </div>
+    <span class="spacer"></span>
+    <label class="sub"><input type="checkbox" id="auto" checked> auto-refresh 5s</label>
+    <button class="btn" id="theme" title="Toggle theme">◐</button>
+  </div>
+
+  <section class="kpis" id="kpis"></section>
+
+  <div class="grid">
+    <div class="card wide">
+      <h2 id="daily-title">Daily usage</h2>
+      <div class="hint">Per local day, main agents + subagents</div>
+      <div id="daily"></div>
+    </div>
+    <div class="card">
+      <h2>By agent type</h2>
+      <div class="hint">“main” is the top-level agent; others are subagents</div>
+      <div id="agents"></div>
+    </div>
+    <div class="card">
+      <h2>By project</h2>
+      <div class="hint">Working directory of the session</div>
+      <div id="projects"></div>
+    </div>
+    <div class="card wide">
+      <h2>Sessions</h2>
+      <div class="hint">Click a session to see each agent's share</div>
+      <div class="scroll" id="sessions"></div>
+    </div>
+    <div class="card wide" id="detail" hidden></div>
+  </div>
+  <div class="foot">Est. $ uses Anthropic API list prices. On a subscription plan it is the API-equivalent value, not your bill.</div>
+</div>
+<div class="tip" id="tip"></div>
+
+<script>
+(() => {
+  const $ = (s) => document.querySelector(s);
+  const state = { since: localStorage.aw_since || "7d", project: "", metric: localStorage.aw_metric || "cost_usd", data: null, selected: (location.hash.match(/s=([\w-]+)/) || [])[1] || null };
+  const METRIC_LABEL = { cost_usd: "Est. $", total: "Tokens", output: "Output tokens" };
+
+  // ---------- formatting ----------
+  const fmtTok = (n) => n >= 1e9 ? (n / 1e9).toFixed(2) + "B" : n >= 1e6 ? (n / 1e6).toFixed(2) + "M" : n >= 1e3 ? (n / 1e3).toFixed(1) + "k" : String(n);
+  const fmtUsd = (x) => "$" + (x >= 100 ? x.toLocaleString(undefined, { maximumFractionDigits: 0 }) : x.toFixed(2));
+  const fmtM = (m, v) => m === "cost_usd" ? fmtUsd(v) : fmtTok(v);
+  const fmtTime = (iso) => iso ? new Date(iso).toLocaleString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }) : "–";
+  const fmtDay = (d) => new Date(d + "T00:00:00").toLocaleDateString(undefined, { month: "short", day: "numeric" });
+
+  // ---------- tiny DOM helpers (textContent only: log text is untrusted) ----------
+  function el(tag, attrs = {}, ...kids) {
+    const e = document.createElement(tag);
+    for (const [k, v] of Object.entries(attrs)) {
+      if (k === "class") e.className = v; else if (k === "text") e.textContent = v;
+      else if (k.startsWith("on")) e.addEventListener(k.slice(2), v); else e.setAttribute(k, v);
+    }
+    for (const k of kids) if (k != null) e.append(k);
+    return e;
+  }
+  const NS = "http://www.w3.org/2000/svg";
+  function sv(tag, attrs = {}) { const e = document.createElementNS(NS, tag); for (const [k, v] of Object.entries(attrs)) e.setAttribute(k, v); return e; }
+
+  // ---------- tooltip ----------
+  const tip = $("#tip");
+  function showTip(evt, title, rows) {
+    tip.replaceChildren(el("div", { class: "h", text: title }), ...rows.map(([k, v]) => el("div", { class: "r" }, el("span", { text: k }), el("b", { text: v }))));
+    tip.style.display = "block";
+    const r = tip.getBoundingClientRect();
+    let x = evt.clientX + 14, y = evt.clientY + 14;
+    if (x + r.width > innerWidth - 8) x = evt.clientX - r.width - 14;
+    if (y + r.height > innerHeight - 8) y = evt.clientY - r.height - 14;
+    tip.style.left = x + "px"; tip.style.top = y + "px";
+  }
+  const hideTip = () => { tip.style.display = "none"; };
+
+  // ---------- KPIs ----------
+  function renderKpis(t) {
+    const cacheBase = t.input + t.cache_write + t.cache_read;
+    const hit = cacheBase ? (100 * t.cache_read / cacheBase).toFixed(1) + "%" : "–";
+    const items = [
+      ["Est. cost", fmtUsd(t.cost_usd), `${t.calls.toLocaleString()} model calls`],
+      ["Total tokens", fmtTok(t.total), `${fmtTok(t.input + t.cache_write)} fresh input`],
+      ["Output tokens", fmtTok(t.output), "generated by agents"],
+      ["Sessions", t.sessions.toLocaleString(), t.active ? `${t.active} live now` : "none live now"],
+      ["Subagent runs", t.subagent_runs.toLocaleString(), t.sessions ? `${(t.subagent_runs / t.sessions).toFixed(1)} per session` : ""],
+      ["Cache hit rate", hit, "of input served from cache"],
+    ];
+    $("#kpis").replaceChildren(...items.map(([l, v, n]) => el("div", { class: "kpi" }, el("div", { class: "label", text: l }), el("div", { class: "value", text: v }), el("div", { class: "note", text: n }))));
+  }
+
+  // ---------- daily bar chart ----------
+  function niceMax(v) { if (v <= 0) return 1; const p = 10 ** Math.floor(Math.log10(v)); const n = v / p; return (n <= 1 ? 1 : n <= 2 ? 2 : n <= 5 ? 5 : 10) * p; }
+  function renderDaily(days, m) {
+    const host = $("#daily");
+    $("#daily-title").textContent = `Daily ${METRIC_LABEL[m].toLowerCase()}`;
+    if (!days.length) { host.replaceChildren(el("div", { class: "empty", text: "No usage in this range." })); return; }
+    const W = Math.max(host.clientWidth, 320), H = 220, L = 52, R = 8, T = 10, B = 26;
+    const max = niceMax(Math.max(...days.map((d) => d[m])));
+    const pw = W - L - R, ph = H - T - B, step = pw / days.length;
+    const bw = Math.max(2, Math.min(36, step - 2));
+    const svg = sv("svg", { width: W, height: H, viewBox: `0 0 ${W} ${H}`, role: "img", "aria-label": `Daily ${METRIC_LABEL[m]}` });
+    for (let i = 0; i <= 4; i++) {
+      const y = T + ph - (ph * i) / 4;
+      svg.append(sv("line", { class: "gridline", x1: L, x2: W - R, y1: y, y2: y }));
+      const tx = sv("text", { x: L - 8, y: y + 4, "text-anchor": "end" }); tx.textContent = fmtM(m, (max * i) / 4); svg.append(tx);
+    }
+    const every = Math.ceil(days.length / Math.floor(pw / 56));
+    const bars = [];
+    days.forEach((d, i) => {
+      const x = L + i * step + (step - bw) / 2, h = (d[m] / max) * ph, y = T + ph - h;
+      const r = Math.min(4, bw / 2, h);
+      const path = h > 0 ? `M${x},${T + ph} V${y + r} Q${x},${y} ${x + r},${y} H${x + bw - r} Q${x + bw},${y} ${x + bw},${y + r} V${T + ph} Z` : "";
+      const bar = sv("path", { class: "bar", d: path }); bars.push(bar); svg.append(bar);
+      if (i % every === 0) { const tx = sv("text", { x: x + bw / 2, y: H - 8, "text-anchor": "middle" }); tx.textContent = fmtDay(d.date); svg.append(tx); }
+      const hit = sv("rect", { class: "hit", x: L + i * step, y: T, width: step, height: ph });
+      hit.addEventListener("mousemove", (e) => {
+        bars.forEach((b, j) => b.classList.toggle("dim", j !== i));
+        showTip(e, new Date(d.date + "T00:00:00").toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" }), [
+          ["Est. $", fmtUsd(d.cost_usd)], ["Tokens", fmtTok(d.total)], ["Output", fmtTok(d.output)], ["Sessions", String(d.sessions)]]);
+      });
+      hit.addEventListener("mouseleave", () => { bars.forEach((b) => b.classList.remove("dim")); hideTip(); });
+      svg.append(hit);
+    });
+    svg.append(sv("line", { class: "gridline", x1: L, x2: W - R, y1: T + ph, y2: T + ph, style: "stroke: var(--text-muted)" }));
+    host.replaceChildren(svg);
+  }
+
+  // ---------- horizontal bars ----------
+  function renderHBars(host, rows, nameKey, m, extra, limit = 10) {
+    if (!rows.length) { host.replaceChildren(el("div", { class: "empty", text: "No data." })); return; }
+    rows = [...rows].sort((a, b) => b[m] - a[m]);
+    let shown = rows.slice(0, limit);
+    if (rows.length > limit) {
+      const rest = rows.slice(limit), o = { [nameKey]: `Other (${rest.length})` };
+      for (const k of ["cost_usd", "total", "output", "input", "cache_read", "cache_write", "calls", "runs", "sessions"]) o[k] = rest.reduce((s, r) => s + (r[k] || 0), 0);
+      shown.push(o);
+    }
+    const max = Math.max(...shown.map((r) => r[m])) || 1;
+    const grid = el("div", { class: "hbars" });
+    for (const r of shown) {
+      const fill = el("div", { class: "fill" }); fill.style.width = (100 * r[m] / max) + "%";
+      const move = (e) => showTip(e, r[nameKey], [["Est. $", fmtUsd(r.cost_usd)], ["Tokens", fmtTok(r.total)], ["Output", fmtTok(r.output)], ...extra(r)]);
+      for (const c of [el("div", { class: "name", text: r[nameKey], title: r[nameKey] }), el("div", { class: "track" }, fill), el("div", { class: "val", text: fmtM(m, r[m]) })]) {
+        c.addEventListener("mousemove", move); c.addEventListener("mouseleave", hideTip); grid.append(c);
+      }
+    }
+    host.replaceChildren(grid);
+  }
+
+  // ---------- sessions table ----------
+  function renderSessions(sessions, m) {
+    const host = $("#sessions");
+    if (!sessions.length) { host.replaceChildren(el("div", { class: "empty", text: "No sessions in this range." })); return; }
+    const head = el("tr", {}, ...["Session", "Last active", "Project", "Model", "Subagents", "Output", "Tokens", "Est. $"].map((h, i) => el("th", { class: i >= 4 ? "num" : "", text: h })));
+    const sorted = [...sessions].sort((a, b) => (b.active - a.active) || (new Date(b.end) - new Date(a.end)));
+    const body = sorted.slice(0, 100).map((s) => el("tr", { class: "click" + (s.id === state.selected ? " sel" : ""), onclick: () => { state.selected = s.id; history.replaceState(null, "", "#s=" + s.id); render(); $("#detail").scrollIntoView({ behavior: "smooth", block: "nearest" }); } },
+      el("td", {}, el("span", { class: "mono", text: s.id.slice(0, 8) }), s.active ? el("span", { class: "tag live", text: "live", style: "margin-left:6px" }) : null),
+      el("td", { text: fmtTime(s.end) }),
+      el("td", { text: s.project }),
+      el("td", { class: "mono", text: s.model }),
+      el("td", { class: "num", text: String(s.agents.length - 1) }),
+      el("td", { class: "num", text: fmtTok(s.usage.output) }),
+      el("td", { class: "num", text: fmtTok(s.usage.total) }),
+      el("td", { class: "num strong", text: fmtUsd(s.usage.cost_usd) })));
+    host.replaceChildren(el("table", {}, el("thead", {}, head), el("tbody", {}, ...body)));
+  }
+
+  function renderDetail(sessions, m) {
+    const host = $("#detail");
+    const s = sessions.find((x) => x.id === state.selected);
+    if (!s) { host.hidden = true; return; }
+    host.hidden = false;
+    const tot = s.usage[m] || 1;
+    const head = el("tr", {}, ...["Agent", "Task", "Model", "Calls", "Input", "Output", "Cache W", "Cache R", "Est. $", "Share"].map((h, i) => el("th", { class: i >= 3 ? "num" : "", text: h })));
+    const rows = s.agents.map((a) => {
+      const pct = 100 * a.usage[m] / tot;
+      const f = el("div", { class: "f" }); f.style.width = pct + "%";
+      const label = a.label === "main" ? "main" : "↳ " + a.label;
+      return el("tr", {},
+        el("td", { class: "strong", text: label, style: a.depth > 1 ? `padding-left:${8 + 14 * (a.depth - 1)}px` : "" }),
+        el("td", {}, a.description, a.finished === false ? el("span", { class: "tag live", text: "running", style: "margin-left:6px" }) : null),
+        el("td", { class: "mono", text: Object.keys(a.models).join(", ") }),
+        el("td", { class: "num", text: a.usage.calls.toLocaleString() }),
+        el("td", { class: "num", text: fmtTok(a.usage.input) }),
+        el("td", { class: "num", text: fmtTok(a.usage.output) }),
+        el("td", { class: "num", text: fmtTok(a.usage.cache_write) }),
+        el("td", { class: "num", text: fmtTok(a.usage.cache_read) }),
+        el("td", { class: "num strong", text: fmtUsd(a.usage.cost_usd) }),
+        el("td", { class: "num" }, el("div", { class: "share" }, el("span", { text: pct.toFixed(0) + "%" }), el("div", { class: "t" }, f))));
+    });
+    host.replaceChildren(
+      el("h2", {}, "Session ", el("span", { class: "mono", text: s.id })),
+      el("div", { class: "hint", text: `${s.project} · ${fmtTime(s.start)} → ${fmtTime(s.end)} · ${fmtTok(s.usage.total)} tokens · ${fmtUsd(s.usage.cost_usd)} · share by ${METRIC_LABEL[m]}` }),
+      el("div", { class: "scroll" }, el("table", {}, el("thead", {}, head), el("tbody", {}, ...rows))),
+      el("div", { style: "margin-top:10px" }, el("button", { class: "btn", text: "Close", onclick: () => { state.selected = null; history.replaceState(null, "", location.pathname); render(); } })));
+  }
+
+  // ---------- main ----------
+  function render() {
+    const d = state.data; if (!d) return;
+    const m = state.metric;
+    renderKpis(d.totals);
+    renderDaily(d.daily, m);
+    renderHBars($("#agents"), d.by_agent, "label", m, (r) => [["Runs", String(r.runs)], ["Avg $ / run", fmtUsd(r.cost_usd / Math.max(r.runs, 1))]]);
+    renderHBars($("#projects"), d.by_project, "project", m, (r) => [["Sessions", String(r.sessions)]]);
+    renderSessions(d.sessions, m);
+    renderDetail(d.sessions, m);
+  }
+
+  async function load() {
+    try {
+      const q = new URLSearchParams({ since: state.since }); if (state.project) q.set("project", state.project);
+      const res = await fetch("/api/data?" + q); if (!res.ok) throw new Error(res.status);
+      const d = await res.json();
+      state.data = d;
+      const sel = $("#project"), cur = state.project;
+      sel.replaceChildren(el("option", { value: "", text: "All projects" }), ...d.projects.map((p) => el("option", { value: p, text: p })));
+      sel.value = d.projects.includes(cur) ? cur : "";
+      $("#status").textContent = `updated ${new Date(d.generated_at).toLocaleTimeString()} · ${d.totals.active} live session${d.totals.active === 1 ? "" : "s"}`;
+      $("#dot").classList.toggle("off", !d.totals.active);
+      render();
+    } catch (e) {
+      $("#status").textContent = "cannot reach agentwatch server – is `agentwatch web` running?";
+      $("#dot").classList.add("off");
+    }
+  }
+
+  function bindSeg(id, key, store) {
+    const seg = $(id);
+    seg.querySelectorAll("button").forEach((b) => {
+      b.setAttribute("aria-pressed", String(b.dataset.v === state[key]));
+      b.addEventListener("click", () => {
+        state[key] = b.dataset.v; if (store) localStorage[store] = b.dataset.v;
+        seg.querySelectorAll("button").forEach((x) => x.setAttribute("aria-pressed", String(x === b)));
+        key === "metric" ? render() : load();
+      });
+    });
+  }
+  bindSeg("#range", "since", "aw_since");
+  bindSeg("#metric", "metric", "aw_metric");
+  $("#project").addEventListener("change", (e) => { state.project = e.target.value; state.selected = null; load(); });
+  const savedTheme = localStorage.aw_theme; if (savedTheme) document.documentElement.dataset.theme = savedTheme;
+  $("#theme").addEventListener("click", () => {
+    const dark = document.documentElement.dataset.theme ? document.documentElement.dataset.theme === "dark" : matchMedia("(prefers-color-scheme: dark)").matches;
+    document.documentElement.dataset.theme = localStorage.aw_theme = dark ? "light" : "dark";
+  });
+  let timer = setInterval(() => $("#auto").checked && !document.hidden && load(), 5000);
+  addEventListener("resize", () => { clearTimeout(window._rz); window._rz = setTimeout(render, 120); });
+  load();
+})();
+</script>
+</body>
+</html>
